@@ -3,6 +3,9 @@ use actix_files::Files;
 use actix_web_actors::ws;
 use actix_web::{web, App, Error, HttpRequest, HttpResponse, HttpServer};
 
+mod message;
+mod server;
+
 async fn client_route(req: HttpRequest, stream: web::Payload) -> Result<HttpResponse, Error> {
 }
 
