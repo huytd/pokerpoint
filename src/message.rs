@@ -5,8 +5,8 @@ use actix::prelude::*;
 pub struct PokerMessage(pub String);
 
 #[derive(Clone, Message)]
-#[rtype(result = "()")]
-pub struct JoinRoom(pub String, pub Option<String>);
+#[rtype(result = "usize")]
+pub struct JoinRoom(pub String, pub Recipient<PokerMessage>);
 
 #[derive(Clone, Message)]
 #[rtype(result = "()")]

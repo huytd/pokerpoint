@@ -1,22 +1,61 @@
 use actix::prelude::*;
-use actix_broker::BrokerSubscribe;
 use std::collections::HashMap;
 
-use crate::message::{PokerMessage};
+use crate::message::{PokerMessage, JoinRoom};
 
 type Client = Recipient<PokerMessage>;
 type Room = HashMap<usize, Client>;
 
 #[derive(Default)]
-struct PokerServer {
-    rooms: HashMap<usize, Room>,
+pub struct PokerServer {
+    rooms: HashMap<String, Room>,
+}
+
+impl PokerServer {
+    fn add_client_to_room(&mut self, room_name: String, client: Client) -> usize {
+        let mut id: usize = rand::random::<usize>();
+
+        // If there's an exists room
+        if let Some(room) = self.rooms.get_mut(&room_name) {
+            // TODO: Switch to uuid instead of random usize
+            loop {
+                if room.contains_key(&id) {
+                    id = rand::random::<usize>();
+                } else {
+                    break;
+                }
+            }
+
+            room.insert(id, client);
+
+            println!("Client joined room {}", id);
+
+            return id;
+        }
+
+        // If there's no existing room
+        let mut room: Room = HashMap::new();
+        room.insert(id, client);
+
+        println!("Client joined room {}", id);
+
+        self.rooms.insert(room_name.to_owned(), room);
+
+        id
+    }
 }
 
 impl Actor for PokerServer {
     type Context = Context<Self>;
+}
 
-    fn started(&mut self, ctx: &mut Self::Context) {
-        self.subscribe_system_async::<PokerMessage>(ctx);
+impl Handler<JoinRoom> for PokerServer {
+    type Result = usize;
+
+    fn handle(&mut self, msg: JoinRoom, ctx: &mut Self::Context) -> Self::Result {
+        let JoinRoom(room_name, client) = msg;
+        let id = self.add_client_to_room(room_name, client);
+        id
     }
 }
 

@@ -1193,6 +1193,7 @@ dependencies = [
  "actix-rt",
  "actix-web",
  "actix-web-actors",
+ "rand",
 ]
 
 [[package]]
