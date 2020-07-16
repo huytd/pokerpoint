@@ -2,7 +2,7 @@ use actix::prelude::*;
 
 #[derive(Clone, Message)]
 #[rtype(result = "()")]
-pub struct PokerMessage(pub usize, pub String);
+pub struct PokerMessage(pub usize, pub String, pub String);
 
 #[derive(Clone, Message)]
 #[rtype(result = "usize")]

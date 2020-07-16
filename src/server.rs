@@ -1,7 +1,7 @@
 use actix::prelude::*;
 use std::collections::HashMap;
 
-use crate::message::{PokerMessage, JoinRoom};
+use crate::message::{PokerMessage, JoinRoom, LeaveRoom};
 
 type Client = Recipient<PokerMessage>;
 type Room = HashMap<usize, Client>;
@@ -43,6 +43,12 @@ impl PokerServer {
 
         id
     }
+
+    fn remove_client_from_room(&mut self, room_name: String, id: usize) {
+        if let Some(room) = self.rooms.get_mut(&room_name) {
+            room.remove(&id);
+        }
+    }
 }
 
 impl Actor for PokerServer {
@@ -59,16 +65,30 @@ impl Handler<JoinRoom> for PokerServer {
     }
 }
 
+impl Handler<LeaveRoom> for PokerServer {
+    type Result = ();
+
+    fn handle(&mut self, msg: LeaveRoom, ctx: &mut Self::Context) -> Self::Result {
+        let LeaveRoom(room_name, id) = msg;
+        self.remove_client_from_room(room_name, id);
+    }
+}
+
 impl Handler<PokerMessage> for PokerServer {
     type Result = ();
 
     fn handle(&mut self, msg: PokerMessage, ctx: &mut Self::Context) -> Self::Result {
-        if let Some(room) = self.rooms.get("lobby") {
-            // TODO: Find a way to remove dead client in this step
-            for (id, client) in room {
-                if &msg.0 != id {
-                    if client.do_send(msg.to_owned()).is_err() {
-                        println!("This client is dead {}", id);
+        let PokerMessage(id, room_name, message) = msg;
+        if let Some(room) = self.rooms.get(&room_name) {
+            // Only allow people send message to the room they're in
+            if room.contains_key(&id) {
+                // TODO: Find a way to remove dead client in this step
+                for (id, client) in room {
+                    if &msg.0 != id {
+                        let msg = PokerMessage(*id, room_name.to_owned(), message.to_owned());
+                        if client.do_send(msg).is_err() {
+                            println!("This client is dead {}", id);
+                        }
                     }
                 }
             }
