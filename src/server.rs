@@ -59,5 +59,22 @@ impl Handler<JoinRoom> for PokerServer {
     }
 }
 
+impl Handler<PokerMessage> for PokerServer {
+    type Result = ();
+
+    fn handle(&mut self, msg: PokerMessage, ctx: &mut Self::Context) -> Self::Result {
+        if let Some(room) = self.rooms.get("lobby") {
+            // TODO: Find a way to remove dead client in this step
+            for (id, client) in room {
+                if &msg.0 != id {
+                    if client.do_send(msg.to_owned()).is_err() {
+                        println!("This client is dead {}", id);
+                    }
+                }
+            }
+        }
+    }
+}
+
 impl SystemService for PokerServer {}
 impl Supervised for PokerServer {}

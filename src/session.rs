@@ -7,7 +7,7 @@ use crate::message::{PokerMessage, JoinRoom};
 
 type WebsocketMessage = Result<ws::Message, ws::ProtocolError>;
 
-#[derive(Default)]
+#[derive(Default, Debug)]
 pub struct PokerSesssion {
     id: usize,
     room: String,
@@ -19,7 +19,11 @@ impl PokerSesssion {
         PokerServer::from_registry()
             .send(JoinRoom(room_name.to_owned(), ctx.address().recipient()))
             .into_actor(self)
-            .then(|a, b, c| {
+            .then(|id, session, _context| {
+                if let Ok(id) = id {
+                    session.id = id;
+                    println!("JOINED {:?} {:?}", id, session);
+                }
                 fut::ready(())
             })
             .wait(ctx);
@@ -38,7 +42,7 @@ impl Handler<PokerMessage> for PokerSesssion {
     type Result = ();
 
     fn handle(&mut self, msg: PokerMessage, ctx: &mut Self::Context) {
-        ctx.text(msg.0);
+        ctx.text(msg.1);
     }
 }
 
@@ -47,7 +51,8 @@ impl StreamHandler<WebsocketMessage> for PokerSesssion {
         if let Ok(msg) = msg {
             match msg {
                 ws::Message::Text(msg) => {
-                    ctx.text(msg);
+                    PokerServer::from_registry()
+                        .do_send(PokerMessage(self.id, msg));
                 }
                 ws::Message::Close(reason) => {
                     ctx.close(reason);
