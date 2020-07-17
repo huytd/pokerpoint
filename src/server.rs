@@ -1,7 +1,7 @@
 use actix::prelude::*;
 use std::collections::HashMap;
 
-use crate::message::{PokerMessage, JoinRoom, LeaveRoom};
+use crate::message::{PokerMessage, JoinRoom, LeaveRoom, JoinResult};
 
 type Client = Recipient<PokerMessage>;
 type Room = HashMap<usize, Client>;
@@ -56,19 +56,20 @@ impl Actor for PokerServer {
 }
 
 impl Handler<JoinRoom> for PokerServer {
-    type Result = usize;
+    type Result = JoinResult;
 
-    fn handle(&mut self, msg: JoinRoom, ctx: &mut Self::Context) -> Self::Result {
+    fn handle(&mut self, msg: JoinRoom, _ctx: &mut Self::Context) -> Self::Result {
         let JoinRoom(room_name, client) = msg;
+        let joined_room = room_name.to_owned();
         let id = self.add_client_to_room(room_name, client);
-        id
+        JoinResult(id, joined_room)
     }
 }
 
 impl Handler<LeaveRoom> for PokerServer {
     type Result = ();
 
-    fn handle(&mut self, msg: LeaveRoom, ctx: &mut Self::Context) -> Self::Result {
+    fn handle(&mut self, msg: LeaveRoom, _ctx: &mut Self::Context) -> Self::Result {
         let LeaveRoom(room_name, id) = msg;
         self.remove_client_from_room(room_name, id);
     }
@@ -77,7 +78,7 @@ impl Handler<LeaveRoom> for PokerServer {
 impl Handler<PokerMessage> for PokerServer {
     type Result = ();
 
-    fn handle(&mut self, msg: PokerMessage, ctx: &mut Self::Context) -> Self::Result {
+    fn handle(&mut self, msg: PokerMessage, _ctx: &mut Self::Context) -> Self::Result {
         let PokerMessage(id, room_name, message) = msg;
         if let Some(room) = self.rooms.get(&room_name) {
             // Only allow people send message to the room they're in

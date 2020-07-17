@@ -2,8 +2,7 @@ use actix::prelude::*;
 use actix_web_actors::ws;
 
 use crate::server::PokerServer;
-
-use crate::message::{PokerMessage, JoinRoom, LeaveRoom};
+use crate::message::{PokerMessage, JoinRoom, LeaveRoom, JoinResult};
 
 type WebsocketMessage = Result<ws::Message, ws::ProtocolError>;
 
@@ -15,18 +14,28 @@ pub struct PokerSesssion {
 }
 
 impl PokerSesssion {
-    fn join_room(&mut self, room_name: &str, ctx: &mut ws::WebsocketContext<Self>) {
-        let room_name= room_name.to_owned();
-        PokerServer::from_registry()
-            .send(JoinRoom(room_name.to_owned(), ctx.address().recipient()))
-            .into_actor(self)
-            .then(|id, session, _context| {
-                if let Ok(id) = id {
-                    session.id = id;
-                    session.room = room_name;
-                    println!("JOINED {:?} {:?}", id, session);
+    fn join_room(&mut self, room_name: String, ctx: &mut ws::WebsocketContext<Self>) {
+        let current_room = self.room.to_owned();
+        let current_id = self.id.to_owned();
+        let next_room = room_name.to_owned();
+        let recipient = ctx.address().recipient();
+
+        let action = async move {
+            PokerServer::from_registry()
+                .send(LeaveRoom(current_room, current_id))
+                .await?;
+
+            PokerServer::from_registry()
+                .send(JoinRoom(next_room, recipient))
+                .await
+        };
+
+        actix::fut::wrap_future::<_, Self>(action)
+            .map(|result, session, _ctx| {
+                if let Ok(result) = result {
+                    session.id = result.0;
+                    session.room = result.1;
                 }
-                fut::ready(())
             })
             .wait(ctx);
     }
@@ -75,7 +84,7 @@ impl StreamHandler<WebsocketMessage> for PokerSesssion {
                         match command {
                             "/join" => {
                                 let room_name = parts[1..].join(" ");
-                                self.join_room(&room_name, ctx);
+                                self.join_room(room_name, ctx);
                             }
                             "/leave" => {
                                 self.leave_room(ctx);
