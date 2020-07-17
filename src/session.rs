@@ -57,6 +57,10 @@ impl PokerSesssion {
         PokerServer::from_registry()
             .do_send(PokerMessage(self.id, room_name, msg));
     }
+
+    fn set_name(&mut self, name: String) {
+        self.name = Some(name);
+    }
 }
 
 impl Actor for PokerSesssion {
@@ -89,10 +93,16 @@ impl StreamHandler<WebsocketMessage> for PokerSesssion {
                             "/leave" => {
                                 self.leave_room(ctx);
                             }
+                            "/name" => {
+                                let name = parts[1..].join(" ");
+                                self.set_name(name);
+                            }
                             _ => {}
                         }
                     } else {
                         // Broadcast message to others
+                        let sender = self.name.to_owned().unwrap_or_default();
+                        let msg = format!("[{}]: {}", sender, msg);
                         self.send_message(msg);
                     }
                 }
