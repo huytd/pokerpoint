@@ -49,6 +49,18 @@ impl PokerServer {
             room.remove(&id);
         }
     }
+
+    fn broadcast(&self, room: &Room, msg: PokerMessage) {
+        let PokerMessage(sender_id, room_name, message) = msg;
+        for (id, client) in room {
+            if &sender_id != id {
+                let msg = PokerMessage(sender_id, room_name.to_owned(), message.to_owned());
+                if client.do_send(msg).is_err() {
+                    println!("This client is dead {}", id);
+                }
+            }
+        }
+    }
 }
 
 impl Actor for PokerServer {
@@ -84,14 +96,7 @@ impl Handler<PokerMessage> for PokerServer {
             // Only allow people send message to the room they're in
             if room.contains_key(&id) {
                 // TODO: Find a way to remove dead client in this step
-                for (id, client) in room {
-                    if &msg.0 != id {
-                        let msg = PokerMessage(*id, room_name.to_owned(), message.to_owned());
-                        if client.do_send(msg).is_err() {
-                            println!("This client is dead {}", id);
-                        }
-                    }
-                }
+                self.broadcast(&room, PokerMessage(id, room_name, message));
             }
         }
     }
