@@ -84,7 +84,7 @@ impl PokerSesssion {
 impl Actor for PokerSesssion {
     type Context = ws::WebsocketContext<Self>;
 
-    fn stopped(&mut self, ctx: &mut Self::Context) {
+    fn stopped(&mut self, _ctx: &mut Self::Context) {
         println!("Client disconnected");
     }
 }

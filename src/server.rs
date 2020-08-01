@@ -2,7 +2,7 @@ use actix::prelude::*;
 use std::collections::HashMap;
 
 use crate::message::{PokerMessage, JoinRoom, LeaveRoom, JoinResult};
-use crate::room::{RoomLogic, RoomBroadcast, RoomDestroy};
+use crate::room::{RoomLogic, RoomDestroy};
 
 type Client = Recipient<PokerMessage>;
 struct Room {
