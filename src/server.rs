@@ -2,9 +2,10 @@ use actix::prelude::*;
 use std::collections::HashMap;
 
 use crate::message::{PokerMessage, JoinRoom, LeaveRoom, JoinResult};
+use crate::room::{RoomLogic, RoomBroadcast, RoomDestroy};
 
 type Client = Recipient<PokerMessage>;
-type Room = HashMap<usize, Client>;
+type Room = (HashMap<usize, Client>, Addr<RoomLogic>);
 
 #[derive(Default)]
 pub struct PokerServer {
@@ -17,25 +18,25 @@ impl PokerServer {
 
         // If there's an exists room
         if let Some(room) = self.rooms.get_mut(&room_name) {
-            // TODO: Switch to uuid instead of random usize
             loop {
-                if room.contains_key(&id) {
+                if room.0.contains_key(&id) {
                     id = rand::random::<usize>();
                 } else {
                     break;
                 }
             }
 
-            room.insert(id, client);
-
+            room.0.insert(id, client);
             println!("Client joined room {}", id);
 
             return id;
         }
 
         // If there's no existing room
-        let mut room: Room = HashMap::new();
-        room.insert(id, client);
+        let room_logic = RoomLogic.start();
+        let mut room: Room = (HashMap::new(), room_logic);
+
+        room.0.insert(id, client);
 
         println!("Client joined room {}", id);
 
@@ -46,13 +47,19 @@ impl PokerServer {
 
     fn remove_client_from_room(&mut self, room_name: String, id: usize) {
         if let Some(room) = self.rooms.get_mut(&room_name) {
-            room.remove(&id);
+            room.0.remove(&id);
+            if room.0.len() <= 0 {
+                room.1.do_send(RoomDestroy);
+                self.rooms.remove(&room_name);
+                println!("Removed roomn {}", &room_name);
+            }
         }
     }
 
     fn broadcast(&self, room: &Room, msg: PokerMessage) {
+        let (clients, _) = room;
         let PokerMessage(sender_id, room_name, message) = msg;
-        for (id, client) in room {
+        for (id, client) in clients {
             if &sender_id != id {
                 let msg = PokerMessage(sender_id, room_name.to_owned(), message.to_owned());
                 if client.do_send(msg).is_err() {
@@ -94,8 +101,7 @@ impl Handler<PokerMessage> for PokerServer {
         let PokerMessage(id, room_name, message) = msg;
         if let Some(room) = self.rooms.get(&room_name) {
             // Only allow people send message to the room they're in
-            if room.contains_key(&id) {
-                // TODO: Find a way to remove dead client in this step
+            if room.0.contains_key(&id) {
                 self.broadcast(&room, PokerMessage(id, room_name, message));
             }
         }

@@ -1,8 +1,7 @@
 use actix::prelude::*;
 use actix_web_actors::ws;
-
 use crate::server::PokerServer;
-use crate::message::{PokerMessage, JoinRoom, LeaveRoom, JoinResult};
+use crate::message::{PokerMessage, JoinRoom, LeaveRoom};
 
 type WebsocketMessage = Result<ws::Message, ws::ProtocolError>;
 
@@ -13,21 +12,40 @@ pub struct PokerSesssion {
     name: Option<String>
 }
 
+// Communication to Server
 impl PokerSesssion {
-    fn join_room(&mut self, room_name: String, ctx: &mut ws::WebsocketContext<Self>) {
-        let current_room = self.room.to_owned();
-        let current_id = self.id.to_owned();
-        let next_room = room_name.to_owned();
+    fn request_leave(&mut self) -> Request<PokerServer, LeaveRoom> {
+        let room_name = self.room.to_owned();
+        PokerServer::from_registry()
+            .send(LeaveRoom(room_name, self.id))
+    }
+
+    fn send_message(&mut self, msg: String) {
+        let room_name = self.room.to_owned();
+        PokerServer::from_registry()
+            .do_send(PokerMessage(self.id, room_name, msg));
+    }
+
+    fn request_join(&mut self, room_name: String, ctx: &mut ws::WebsocketContext<Self>) -> Request<PokerServer, JoinRoom> {
+        let next_room = room_name;
         let recipient = ctx.address().recipient();
+        PokerServer::from_registry()
+            .send(JoinRoom(next_room, recipient))
+    }
+}
 
+// Handle Session Logic
+impl PokerSesssion {
+    fn set_name(&mut self, name: String) {
+        self.name = Some(name);
+    }
+
+    fn join_room(&mut self, room_name: String, ctx: &mut ws::WebsocketContext<Self>) {
+        let leave_request = self.request_leave();
+        let join_request = self.request_join(room_name, ctx);
         let action = async move {
-            PokerServer::from_registry()
-                .send(LeaveRoom(current_room, current_id))
-                .await?;
-
-            PokerServer::from_registry()
-                .send(JoinRoom(next_room, recipient))
-                .await
+            leave_request.await?;
+            join_request.await
         };
 
         actix::fut::wrap_future::<_, Self>(action)
@@ -41,9 +59,7 @@ impl PokerSesssion {
     }
 
     fn leave_room(&mut self, ctx: &mut ws::WebsocketContext<Self>) {
-        let room_name = self.room.to_owned();
-        PokerServer::from_registry()
-            .send(LeaveRoom(room_name, self.id))
+        self.request_leave()
             .into_actor(self)
             .then(|_, session, _context| {
                 session.id = 0;
@@ -52,19 +68,25 @@ impl PokerSesssion {
         .wait(ctx);
     }
 
-    fn send_message(&mut self, msg: String) {
-        let room_name = self.room.to_owned();
-        PokerServer::from_registry()
-            .do_send(PokerMessage(self.id, room_name, msg));
-    }
-
-    fn set_name(&mut self, name: String) {
-        self.name = Some(name);
+    fn disconnect(&mut self, ctx: &mut ws::WebsocketContext<Self>) {
+        self.request_leave()
+            .into_actor(self)
+            .then(|_, session, context| {
+                session.id = 0;
+                context.close(None);
+                context.stop();
+                fut::ready(())
+            })
+        .wait(ctx);
     }
 }
 
 impl Actor for PokerSesssion {
     type Context = ws::WebsocketContext<Self>;
+
+    fn stopped(&mut self, ctx: &mut Self::Context) {
+        println!("Client disconnected");
+    }
 }
 
 impl Handler<PokerMessage> for PokerSesssion {
@@ -80,7 +102,6 @@ impl StreamHandler<WebsocketMessage> for PokerSesssion {
         if let Ok(msg) = msg {
             match msg {
                 ws::Message::Text(msg) => {
-                    // TODO: Handle commands here
                     let parts = msg.split_whitespace().collect::<Vec<&str>>();
                     let command = parts[0];
                     if command.starts_with("/") {
@@ -106,15 +127,14 @@ impl StreamHandler<WebsocketMessage> for PokerSesssion {
                         self.send_message(msg);
                     }
                 }
-                ws::Message::Close(reason) => {
-                    ctx.close(reason);
-                    ctx.stop();
+                ws::Message::Close(_reason) => {
+                    self.disconnect(ctx);
                 }
                 _ => {}
             }
             return;
         }
         // Close connection if anything happen
-        ctx.stop();
+        self.disconnect(ctx);
     }
 }

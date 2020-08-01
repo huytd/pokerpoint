@@ -6,6 +6,7 @@ use actix_web::{web, App, Error, HttpRequest, HttpResponse, HttpServer};
 mod message;
 mod server;
 mod session;
+mod room;
 
 async fn client_route(req: HttpRequest, stream: web::Payload) -> Result<HttpResponse, Error> {
     ws::start(session::PokerSesssion::default(), &req, stream)
