@@ -2,7 +2,7 @@ use actix::prelude::*;
 use std::collections::HashMap;
 
 use crate::message::{PokerMessage, JoinRoom, LeaveRoom, JoinResult};
-use crate::room::{RoomLogic, RoomDestroy};
+use crate::room_logic::{RoomLogic, RoomDestroy, RoomMessage, RoomResponse};
 
 type Client = Recipient<PokerMessage>;
 struct Room {
@@ -14,6 +14,9 @@ struct Room {
 pub struct PokerServer {
     rooms: HashMap<String, Room>,
 }
+
+// TODO: The nameing of messages referred in this class seems
+// messy, need to re-organize for more meaningful names.
 
 impl PokerServer {
     fn add_client_to_room(&mut self, room_name: String, client: Client) -> usize {
@@ -61,16 +64,26 @@ impl PokerServer {
         }
     }
 
-    fn broadcast(&self, room: &Room, msg: PokerMessage) {
+    fn broadcast(&self, room: &Room, msg: String) {
         let clients = &room.users;
-        let PokerMessage(sender_id, room_name, message) = msg;
         for (id, client) in clients {
-            if &sender_id != id {
-                let msg = PokerMessage(sender_id, room_name.to_owned(), message.to_owned());
-                if client.do_send(msg).is_err() {
+            let msg = PokerMessage(0, String::new(), msg.to_owned());
+            if client.do_send(msg).is_err() {
+                println!("This client is dead {}", id);
+            }
+        }
+    }
+
+    fn message_to_user(&self, room: &Room, user_id: usize, msg: String) {
+        let clients = &room.users;
+        let msg = PokerMessage(0, String::new(), msg.to_owned());
+        for (id, client) in clients {
+            if id == &user_id {
+                if client.do_send(msg.clone()).is_err() {
                     println!("This client is dead {}", id);
                 }
             }
+
         }
     }
 }
@@ -78,6 +91,8 @@ impl PokerServer {
 impl Actor for PokerServer {
     type Context = Context<Self>;
 }
+
+// TODO: Join room need to specify user name
 
 impl Handler<JoinRoom> for PokerServer {
     type Result = JoinResult;
@@ -99,15 +114,31 @@ impl Handler<LeaveRoom> for PokerServer {
     }
 }
 
+// handle message from session and transfer to Room Logic
 impl Handler<PokerMessage> for PokerServer {
     type Result = ();
 
     fn handle(&mut self, msg: PokerMessage, _ctx: &mut Self::Context) -> Self::Result {
         let PokerMessage(id, room_name, message) = msg;
         if let Some(room) = self.rooms.get(&room_name) {
-            // Only allow people send message to the room they're in
-            if room.users.contains_key(&id) {
-                self.broadcast(&room, PokerMessage(id, room_name, message));
+            room.logic.do_send(RoomMessage(id.clone(), room_name.clone(), message.clone()));
+        }
+    }
+}
+
+// Handle message from Room Logic and figure out what to do next
+impl Handler<RoomResponse> for PokerServer {
+    type Result = ();
+
+    fn handle(&mut self, msg: RoomResponse, _ctx: &mut Self::Context) -> Self::Result {
+        let RoomResponse(receiver_id, room_name, message) = msg;
+        if let Some(room) = self.rooms.get(&room_name) {
+            if receiver_id == 0 {
+                // Broadcast to everyone
+                self.broadcast(&room, message);
+            } else {
+                // Only send to an individuall
+                self.message_to_user(&room, receiver_id, message);
             }
         }
     }

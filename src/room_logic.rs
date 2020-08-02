@@ -1,13 +1,20 @@
 use actix::prelude::*;
 
-/* RoomMessage(sender_id, message) */
+/** TODO: This class now serving a very specific purpose
+ * for now, but in the future, it need to be abstracted
+ * as an interface for room logic, to allow the developer
+ * to create many different room logic.
+ */
+
+/* RoomMessage(sender_id, room_name, message) */
 #[derive(Message)]
 #[rtype(result = "()")]
-pub struct RoomMessage(pub usize, pub String);
+pub struct RoomMessage(pub usize, pub String, pub String);
 
-/* RoomResponse(receiver_id, message) */
-#[derive(MessageResponse)]
-pub struct RoomResponse(pub usize, pub String);
+/* RoomResponse(receiver_id, room_name, message) */
+#[derive(Message)]
+#[rtype(result = "()")]
+pub struct RoomResponse(pub usize, pub String, pub String);
 
 /* RoomDestroy */
 #[derive(Message)]
@@ -37,7 +44,8 @@ impl Handler<RoomMessage> for RoomLogic {
     type Result = ();
 
     fn handle(&mut self, msg: RoomMessage, _ctx: &mut Self::Context) {
-        println!("Alriht, this is inside a worker: {}", msg.1);
+        let RoomMessage(sender_id, room_name, message) = msg;
+        // TODO: Handle logic message from here
     }
 }
 

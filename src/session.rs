@@ -103,28 +103,30 @@ impl StreamHandler<WebsocketMessage> for PokerSesssion {
             match msg {
                 ws::Message::Text(msg) => {
                     let parts = msg.split_whitespace().collect::<Vec<&str>>();
-                    let command = parts[0];
-                    if command.starts_with("/") {
-                        // We got a command
-                        match command {
-                            "/join" => {
-                                let room_name = parts[1..].join(" ");
-                                self.join_room(room_name, ctx);
+                    if parts.len() > 0 {
+                        let command = parts[0];
+                        if command.starts_with("/") {
+                            // We got a command
+                            match command {
+                                "/join" => {
+                                    let room_name = parts[1..].join(" ");
+                                    self.join_room(room_name, ctx);
+                                }
+                                "/leave" => {
+                                    self.leave_room(ctx);
+                                }
+                                "/name" => {
+                                    let name = parts[1..].join(" ");
+                                    self.set_name(name);
+                                }
+                                _ => {}
                             }
-                            "/leave" => {
-                                self.leave_room(ctx);
-                            }
-                            "/name" => {
-                                let name = parts[1..].join(" ");
-                                self.set_name(name);
-                            }
-                            _ => {}
+                        } else {
+                            // Broadcast message to others
+                            let sender = self.name.to_owned().unwrap_or_default();
+                            let msg = format!("[{}]: {}", sender, msg);
+                            self.send_message(msg);
                         }
-                    } else {
-                        // Broadcast message to others
-                        let sender = self.name.to_owned().unwrap_or_default();
-                        let msg = format!("[{}]: {}", sender, msg);
-                        self.send_message(msg);
                     }
                 }
                 ws::Message::Close(_reason) => {
